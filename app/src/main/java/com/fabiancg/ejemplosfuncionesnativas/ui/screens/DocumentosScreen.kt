@@ -1,5 +1,7 @@
 package com.fabiancg.ejemplosfuncionesnativas.ui.screens
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,6 +72,7 @@ fun DocumentosScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var documentoAEliminar by remember { mutableStateOf<Documento?>(null) }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val contexto = LocalContext.current
 
     // Mismo patrón del ejemplo EjemploArchivos(): OpenDocument abre el selector del sistema,
     // y no necesita pedir permisos de almacenamiento porque el usuario elige el archivo.
@@ -85,6 +89,25 @@ fun DocumentosScreen(
             snackbarHostState.showSnackbar(texto)
             viewModel.mensajeMostrado()
         }
+    }
+
+    // Cuando el ViewModel deja un documento listo, se pide a otra app (visor de PDF, Word...) que lo muestre.
+    // Mismo patrón de los ejemplos de funciones nativas: Intent + try/catch de ActivityNotFoundException.
+    LaunchedEffect(estado.paraAbrir) {
+        val abrible = estado.paraAbrir ?: return@LaunchedEffect
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(abrible.uri, abrible.tipoMime)
+            // Permiso temporal de LECTURA para el visor, solo sobre este archivo.
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            contexto.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            viewModel.mostrarMensaje("No hay una aplicación instalada para abrir este tipo de archivo")
+        }
+        // Se limpia SIEMPRE, abra o no: así no se vuelve a abrir solo al rotar la pantalla.
+        viewModel.aperturaProcesada()
     }
 
     Scaffold(
@@ -155,6 +178,7 @@ fun DocumentosScreen(
                     items(estado.documentos, key = { it.id }) { documento ->
                         DocumentoItem(
                             documento = documento,
+                            onAbrir = { viewModel.abrirDocumento(documento.id) },
                             onEliminar = { documentoAEliminar = documento }
                         )
                     }
@@ -191,8 +215,10 @@ fun DocumentosScreen(
 }
 
 @Composable
-private fun DocumentoItem(documento: Documento, onEliminar: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun DocumentoItem(documento: Documento, onAbrir: () -> Unit, onEliminar: () -> Unit) {
+    // Card(onClick): toda la tarjeta es tocable. El botón de eliminar tiene su propio clic,
+    // así que tocarlo NO abre el documento.
+    Card(onClick = onAbrir, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically

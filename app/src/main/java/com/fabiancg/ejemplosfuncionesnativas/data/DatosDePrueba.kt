@@ -17,7 +17,8 @@ object DatosDePrueba {
         val nombre: String,
         val asignatura: String,
         val tipoMime: String,
-        val tamanoBytes: Long
+        val tamanoBytes: Long,
+        val archivoEjemplo: String // archivo real dentro de app/src/main/assets/ejemplos/
     )
 
     private val usuarios = listOf(
@@ -30,12 +31,20 @@ object DatosDePrueba {
     private const val DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     private val documentos = listOf(
-        DocumentoDemo("DEMO-001", "Apuntes Unidad 1 - Ética policial (ficticio).pdf", "Ética y Deontología", PDF, 482_000),
-        DocumentoDemo("DEMO-001", "Manual de procedimientos básicos (ficticio).pdf", "Procedimientos Operativos", PDF, 1_250_000),
-        DocumentoDemo("DEMO-001", "Guía de repaso - Primeros auxilios (ficticio).pdf", "Primeros Auxilios", PDF, 730_000),
-        DocumentoDemo("DEMO-002", "Resumen Derecho Penal (ficticio).pdf", "Normativa Institucional", PDF, 910_000),
-        DocumentoDemo("DEMO-002", "Trivia - Normativa de tránsito (ficticio).docx", "Normativa Institucional", DOCX, 64_000)
+        DocumentoDemo("DEMO-001", "Apuntes Unidad 1 - Ética policial (ficticio).pdf", "Ética y Deontología", PDF, 482_000, "etica_policial.pdf"),
+        DocumentoDemo("DEMO-001", "Manual de procedimientos básicos (ficticio).pdf", "Procedimientos Operativos", PDF, 1_250_000, "procedimientos_basicos.pdf"),
+        DocumentoDemo("DEMO-001", "Guía de repaso - Primeros auxilios (ficticio).pdf", "Primeros Auxilios", PDF, 730_000, "primeros_auxilios.pdf"),
+        DocumentoDemo("DEMO-002", "Resumen Derecho Penal (ficticio).pdf", "Normativa Institucional", PDF, 910_000, "derecho_penal.pdf"),
+        DocumentoDemo("DEMO-002", "Trivia - Normativa de tránsito (ficticio).docx", "Normativa Institucional", DOCX, 64_000, "trivia_transito.docx")
     )
+
+    /**
+     * Devuelve el nombre del archivo de ejemplo (en assets/ejemplos) que corresponde a un documento
+     * de prueba, o null si no corresponde a ninguno. Se busca por NOMBRE para no tener que cambiar
+     * la estructura de la base de datos (cambiarla obligaría a migrar o a reinstalar la app).
+     */
+    fun archivoDeEjemplo(nombreDocumento: String): String? =
+        documentos.firstOrNull { it.nombre == nombreDocumento }?.archivoEjemplo
 
     // Nota: onCreate(SupportSQLiteDatabase) solo se invoca cuando Room trabaja sin "driver"
     // (nuestro caso: no configuramos ninguno). Si algún día se migra a Room 3, este método
@@ -60,8 +69,8 @@ object DatosDePrueba {
             // El usuarioId se obtiene con una subconsulta por "codigo": no suponemos qué id quedó.
             db.execSQL(
                 "INSERT INTO documentos " +
-                    "(usuarioId, nombre, asignatura, tipoMime, tamanoBytes, fechaCarga, rutaRelativa, esDePrueba) " +
-                    "VALUES ((SELECT id FROM usuarios WHERE codigo = ?), ?, ?, ?, ?, ?, NULL, 1)",
+                        "(usuarioId, nombre, asignatura, tipoMime, tamanoBytes, fechaCarga, rutaRelativa, esDePrueba) " +
+                        "VALUES ((SELECT id FROM usuarios WHERE codigo = ?), ?, ?, ?, ?, ?, NULL, 1)",
                 arrayOf<Any?>(
                     d.codigoUsuario,
                     d.nombre,
