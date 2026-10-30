@@ -22,36 +22,40 @@ import com.fabiancg.ejemplosfuncionesnativas.ui.theme.EjemplosFuncionesNativasTh
 fun LoginScreen(
     onIniciarSesion: (String, String) -> Unit,
     cargando: Boolean = false,
-    mensajeError: String? = null
+    mensajeError: String? = null,
+    esRegistro: Boolean = false,
+    onRegistrar: (String, String, String, String) -> Unit = { _, _, _, _ -> },
+    onCambiarModo: () -> Unit = {},
+    onLimpiarError: () -> Unit = {}
 ) {
+    var nombre by rememberSaveable(esRegistro) {
+        mutableStateOf("")
+    }
 
+    var codigo by rememberSaveable(esRegistro) {
+        mutableStateOf("")
+    }
 
-    var codigo by rememberSaveable { mutableStateOf("") }
+    // Las contraseñas no se guardan en el estado persistente de Android.
+    var clave by remember(esRegistro) {
+        mutableStateOf("")
+    }
 
+    var confirmacion by remember(esRegistro) {
+        mutableStateOf("")
+    }
 
-    var clave by remember { mutableStateOf("") }
-
-    var mostrarClave by remember { mutableStateOf(false) }
-
-
-    var errorCampos by remember { mutableStateOf<String?>(null) }
-
-    Scaffold { espacioPantalla ->
-
+    Scaffold { espacio ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(espacioPantalla)
+                .padding(espacio)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-
-            Spacer(modifier = Modifier.height(32.dp))
-
             Text(
                 text = "ESFOCAR",
                 style = MaterialTheme.typography.headlineLarge,
@@ -61,129 +65,126 @@ fun LoginScreen(
 
             Text(
                 text = "Escuela de Formación de Carabineros",
-                style = MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Center
             )
 
-            Text(
-                text = "Accede a tu material de estudio.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
+            Text("Punto Verde · Material de estudio")
 
             Card(
                 modifier = Modifier
                     .widthIn(max = 480.dp)
                     .fillMaxWidth()
             ) {
-
                 Column(
                     modifier = Modifier.padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-
                     Text(
-                        text = "Iniciar sesión",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
+                        text = if (esRegistro) {
+                            "Crear cuenta"
+                        } else {
+                            "Iniciar sesión"
+                        },
+                        style = MaterialTheme.typography.headlineSmall
                     )
+
+                    if (esRegistro) {
+                        OutlinedTextField(
+                            value = nombre,
+                            onValueChange = {
+                                nombre = it
+                                onLimpiarError()
+                            },
+                            label = { Text("Nombre de prueba") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            enabled = !cargando
+                        )
+                    }
 
                     OutlinedTextField(
                         value = codigo,
-
                         onValueChange = {
                             codigo = it
-                            errorCampos = null
+                            onLimpiarError()
                         },
-
                         label = { Text("Código de estudiante") },
-
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         enabled = !cargando
                     )
 
-                    OutlinedTextField(
-                        value = clave,
-
-                        onValueChange = {
+                    CampoClave(
+                        valor = clave,
+                        etiqueta = "Contraseña",
+                        habilitado = !cargando,
+                        onCambio = {
                             clave = it
-                            errorCampos = null
-                        },
-
-                        label = { Text("Contraseña") },
-
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        enabled = !cargando,
-
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Password
-                        ),
-
-                        visualTransformation =
-                            if (mostrarClave) {
-                                VisualTransformation.None
-                            } else {
-                                PasswordVisualTransformation()
-                            },
-
-                        trailingIcon = {
-                            TextButton(
-                                onClick = {
-                                    mostrarClave = !mostrarClave
-                                },
-                                enabled = !cargando
-                            ) {
-                                Text(
-                                    if (mostrarClave) "Ocultar"
-                                    else "Ver"
-                                )
-                            }
+                            onLimpiarError()
                         }
                     )
 
-
-                    val errorVisible = errorCampos ?: mensajeError
-
-                    errorVisible?.let { texto ->
+                    if (esRegistro) {
                         Text(
-                            text = texto,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium
+                            text = "Usa entre 8 y 128 caracteres.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+
+                        CampoClave(
+                            valor = confirmacion,
+                            etiqueta = "Repetir contraseña",
+                            habilitado = !cargando,
+                            onCambio = {
+                                confirmacion = it
+                                onLimpiarError()
+                            }
+                        )
+                    }
+
+                    mensajeError?.let {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.error
                         )
                     }
 
                     Button(
+                        onClick = {
+                            if (esRegistro) {
+                                onRegistrar(
+                                    nombre,
+                                    codigo,
+                                    clave,
+                                    confirmacion
+                                )
+                            } else {
+                                onIniciarSesion(codigo, clave)
+                            }
+                        },
+                        enabled = !cargando,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 52.dp),
-
-                        enabled = !cargando,
-
-                        onClick = {
-
-                            val codigoLimpio = codigo.trim()
-
-                            if (codigoLimpio.isBlank() || clave.isBlank()) {
-
-                                errorCampos = "Completa el código y la contraseña."
-
-                            } else {
-
-                                errorCampos = null
-
-
-                                onIniciarSesion(codigoLimpio, clave)
-                            }
-                        }
+                            .heightIn(min = 52.dp)
                     ) {
                         Text(
-                            if (cargando) "Ingresando…"
-                            else "Ingresar"
+                            when {
+                                cargando -> "Procesando…"
+                                esRegistro -> "Crear cuenta"
+                                else -> "Ingresar"
+                            }
+                        )
+                    }
+
+                    TextButton(
+                        onClick = onCambiarModo,
+                        enabled = !cargando
+                    ) {
+                        Text(
+                            if (esRegistro) {
+                                "Ya tengo una cuenta"
+                            } else {
+                                "Crear una cuenta"
+                            }
                         )
                     }
                 }
@@ -192,16 +193,53 @@ fun LoginScreen(
     }
 }
 
-@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+private fun CampoClave(
+    valor: String,
+    etiqueta: String,
+    habilitado: Boolean,
+    onCambio: (String) -> Unit
+) {
+    var visible by remember {
+        mutableStateOf(false)
+    }
+
+    OutlinedTextField(
+        value = valor,
+        onValueChange = onCambio,
+        label = { Text(etiqueta) },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        enabled = habilitado,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Password
+        ),
+        visualTransformation = if (visible) {
+            VisualTransformation.None
+        } else {
+            PasswordVisualTransformation()
+        },
+        trailingIcon = {
+            TextButton(
+                onClick = { visible = !visible },
+                enabled = habilitado
+            ) {
+                Text(if (visible) "Ocultar" else "Ver")
+            }
+        }
+    )
+}
+
+@Preview(
+    showBackground = true,
+    widthDp = 390,
+    heightDp = 844
+)
 @Composable
 private fun LoginScreenPreview() {
-
     EjemplosFuncionesNativasTheme {
-
         LoginScreen(
-            onIniciarSesion = { _, _ ->
-
-            }
+            onIniciarSesion = { _, _ -> }
         )
     }
 }

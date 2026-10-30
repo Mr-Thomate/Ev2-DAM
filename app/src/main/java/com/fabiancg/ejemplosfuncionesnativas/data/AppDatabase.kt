@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Usuario::class, Documento::class],
-    version = 1,
-    exportSchema = false // MVP: no guardamos el historial de esquemas en el repositorio
+    version = 2,
+    exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -16,10 +18,18 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun documentoDao(): DocumentoDao
 
     companion object {
+
         @Volatile
         private var instancia: AppDatabase? = null
 
-        /** Singleton: abrir varias instancias de la misma base de datos es caro y propenso a errores. */
+        val MIGRACION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE usuarios ADD COLUMN claveProtegida TEXT DEFAULT NULL"
+                )
+            }
+        }
+
         fun obtener(contexto: Context): AppDatabase =
             instancia ?: synchronized(this) {
                 instancia ?: Room.databaseBuilder(
@@ -27,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "esfocar_estudio.db"
                 )
+                    .addMigrations(MIGRACION_1_2)
                     .addCallback(DatosDePrueba.callback)
                     .build()
                     .also { instancia = it }
