@@ -3,6 +3,7 @@ package com.fabiancg.ejemplosfuncionesnativas.data
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 
 /**
  * Perfil de prueba (ficticio). El caso exige NO usar nombres, RUT ni correos reales.
@@ -17,5 +18,10 @@ import androidx.room.PrimaryKey
 data class Usuario(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val nombre: String,
-    val codigo: String
+    val codigo: String,
+
+    @ColumnInfo(defaultValue = "NULL")
+    val claveProtegida: String? = null
 )
+
+

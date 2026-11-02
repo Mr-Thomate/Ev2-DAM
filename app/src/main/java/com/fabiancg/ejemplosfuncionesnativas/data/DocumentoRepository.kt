@@ -3,6 +3,8 @@ package com.fabiancg.ejemplosfuncionesnativas.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -12,6 +14,9 @@ import java.util.UUID
 
 /** Error "esperable" (el archivo no cumple una regla). Su mensaje sí se puede mostrar al usuario. */
 class ArchivoInvalidoException(mensaje: String) : Exception(mensaje)
+
+/** Lo necesario para pedirle a otra app que abra el documento: un enlace seguro y el tipo de archivo. */
+class DocumentoAbrible(val uri: Uri, val tipoMime: String)
 
 class DocumentoRepository(
     private val contexto: Context,
@@ -111,6 +116,62 @@ class DocumentoRepository(
             }
             filasBorradas > 0
         }
+
+    /**
+     * Prepara un documento para abrirlo con otra app (visor de PDF, Word, etc.).
+     *
+     * 1) Comprueba que el documento sea de ESTE usuario (misma regla de aislamiento que al listar y borrar).
+     * 2) Ubica el archivo: la copia privada si el usuario lo cargó, o el archivo de ejemplo si es de prueba.
+     * 3) Entrega un Uri "content://" mediante FileProvider. No se puede compartir una ruta de archivo
+     *    directa ("file://"): Android la prohíbe, porque el visor no tiene permiso sobre nuestra carpeta privada.
+     *    FileProvider da un permiso temporal solo para ese archivo.
+     */
+    suspend fun prepararParaAbrir(usuarioId: Long, documentoId: Long): DocumentoAbrible =
+        withContext(Dispatchers.IO) {
+            val documento = documentoDao.buscar(documentoId, usuarioId)
+                ?: throw ArchivoInvalidoException("El documento ya no existe")
+
+            val ruta = documento.rutaRelativa
+            val archivo = if (ruta != null) File(contexto.filesDir, ruta) else copiarEjemploACache(documento)
+
+            if (!archivo.exists()) {
+                throw ArchivoInvalidoException("No se encontró el archivo de este documento")
+            }
+
+            val uri = FileProvider.getUriForFile(contexto, "${contexto.packageName}.fileprovider", archivo)
+            DocumentoAbrible(uri, tipoMimeDe(documento))
+        }
+
+    /**
+     * Los documentos de prueba vienen dentro del APK (assets), que no es un archivo real que otra app pueda leer.
+     * Se copia a la carpeta de caché una sola vez y se reutiliza. En caché (y no en almacenamiento permanente)
+     * porque, si el sistema la limpia, la copia se vuelve a generar sola desde los assets.
+     */
+    private fun copiarEjemploACache(documento: Documento): File {
+        val nombreAsset = DatosDePrueba.archivoDeEjemplo(documento.nombre)
+            ?: throw ArchivoInvalidoException("Este documento de ejemplo no tiene un archivo asociado")
+
+        val destino = File(contexto.cacheDir, "ejemplos/$nombreAsset")
+        if (!destino.exists()) {
+            destino.parentFile?.mkdirs()
+            // Se copia a un archivo temporal y luego se renombra: si la app se cierra a mitad de la copia,
+            // nunca queda un archivo incompleto que parezca válido.
+            val temporal = File(destino.parentFile, "$nombreAsset.tmp")
+            contexto.assets.open("ejemplos/$nombreAsset").use { origen ->
+                temporal.outputStream().use { salida -> origen.copyTo(salida) }
+            }
+            temporal.renameTo(destino)
+        }
+        return destino
+    }
+
+    /** Tipo de archivo (MIME) para que Android elija el visor correcto. Si no se guardó, se deduce de la extensión. */
+    private fun tipoMimeDe(documento: Documento): String {
+        val guardado = documento.tipoMime
+        if (!guardado.isNullOrBlank() && guardado != "application/octet-stream") return guardado
+        val extension = documento.nombre.substringAfterLast('.', "").lowercase()
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "application/octet-stream"
+    }
 
     companion object {
         const val TAMANO_MAXIMO_MB = 300

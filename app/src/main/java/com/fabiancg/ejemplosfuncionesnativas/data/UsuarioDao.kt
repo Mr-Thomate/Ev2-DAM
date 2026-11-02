@@ -16,4 +16,19 @@ interface UsuarioDao {
 
     @Insert
     suspend fun insertar(usuario: Usuario): Long
+
+    @Query("SELECT * FROM usuarios WHERE codigo = :codigo")
+    suspend fun buscarPorCodigo(codigo: String): Usuario?
+
+    @Query("UPDATE usuarios SET nombre = :nombre WHERE id = :id")
+    suspend fun actualizarNombre(id: Long, nombre: String): Int
+
+    @Query(
+        "UPDATE usuarios SET nombre = :nombre, codigo = :codigo WHERE id = :id"
+    )
+    suspend fun actualizarPerfil(
+        id: Long,
+        nombre: String,
+        codigo: String
+    ): Int
 }

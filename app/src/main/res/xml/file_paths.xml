@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Lista BLANCA de carpetas que FileProvider puede compartir con otras apps.
+    Todo lo que no esté aquí (por ejemplo la base de datos) queda inaccesible desde fuera.
+-->
+<paths>
+    <!-- Documentos que el usuario cargó: filesDir/documentos/ -->
+    <files-path name="documentos" path="documentos/" />
+    <!-- Copias de los documentos de ejemplo: cacheDir/ejemplos/ -->
+    <cache-path name="ejemplos" path="ejemplos/" />
+</paths>

@@ -1,60 +1,115 @@
 package com.fabiancg.ejemplosfuncionesnativas.ui.navigation
 
-import androidx.compose.runtime.Composable
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
+import com.fabiancg.ejemplosfuncionesnativas.data.AppDatabase
 import com.fabiancg.ejemplosfuncionesnativas.data.DocumentoRepository
-import com.fabiancg.ejemplosfuncionesnativas.ui.screens.BienvenidaScreen
+import com.fabiancg.ejemplosfuncionesnativas.data.UsuarioRepository
 import com.fabiancg.ejemplosfuncionesnativas.ui.screens.DocumentosScreen
-import com.fabiancg.ejemplosfuncionesnativas.viewmodel.BienvenidaViewModel
+import com.fabiancg.ejemplosfuncionesnativas.ui.screens.LoginScreen
+import com.fabiancg.ejemplosfuncionesnativas.ui.screens.PerfilScreen
 import com.fabiancg.ejemplosfuncionesnativas.viewmodel.DocumentosViewModel
-
-private object Rutas {
-    const val BIENVENIDA = "bienvenida"
-    const val ARG_USUARIO_ID = "usuarioId"
-    const val DOCUMENTOS = "documentos/{$ARG_USUARIO_ID}"
-    fun documentos(usuarioId: Long) = "documentos/$usuarioId"
-}
+import com.fabiancg.ejemplosfuncionesnativas.viewmodel.SesionViewModel
 
 @Composable
 fun AppNavegacion(repositorio: DocumentoRepository) {
-    val navController = rememberNavController()
+    val contexto = LocalContext.current.applicationContext
 
-    NavHost(navController = navController, startDestination = Rutas.BIENVENIDA) {
+    val usuarios = remember(contexto) {
+        UsuarioRepository(
+            AppDatabase.obtener(contexto).usuarioDao()
+        )
+    }
 
-        composable(Rutas.BIENVENIDA) {
-            val viewModel: BienvenidaViewModel = viewModel(
-                factory = BienvenidaViewModel.Factory(repositorio)
-            )
-            BienvenidaScreen(
-                viewModel = viewModel,
-                onUsuarioElegido = { usuario ->
-                    // launchSingleTop evita abrir dos pantallas si se toca la tarjeta dos veces rápido.
-                    navController.navigate(Rutas.documentos(usuario.id)) { launchSingleTop = true }
-                }
-            )
+    val sesion: SesionViewModel = viewModel(
+        factory = SesionViewModel.Factory(usuarios)
+    )
+
+    val estado by sesion.estado.collectAsStateWithLifecycle()
+    val usuario = estado.usuario
+
+    if (usuario == null) {
+        var esRegistro by rememberSaveable {
+            mutableStateOf(false)
         }
 
-        composable(
-            route = Rutas.DOCUMENTOS,
-            arguments = listOf(navArgument(Rutas.ARG_USUARIO_ID) { type = NavType.LongType })
-        ) { entrada ->
-            val usuarioId = entrada.arguments?.getLong(Rutas.ARG_USUARIO_ID) ?: return@composable
+        BackHandler(
+            enabled = esRegistro || estado.ocupado
+        ) {
+            if (!estado.ocupado) {
+                esRegistro = false
+                sesion.limpiarMensajes()
+            }
+        }
 
-            // El ViewModel queda atado a esta pantalla: al volver atrás se destruye junto con ella,
-            // así otro usuario nunca hereda el estado del anterior. La "key" refuerza esa garantía.
-            val viewModel: DocumentosViewModel = viewModel(
-                key = "documentos_$usuarioId",
-                factory = DocumentosViewModel.Factory(repositorio, usuarioId)
-            )
-            DocumentosScreen(
-                viewModel = viewModel,
-                onCerrarSesion = { navController.popBackStack() }
-            )
+        LoginScreen(
+            onIniciarSesion = sesion::iniciarSesion,
+            cargando = estado.ocupado,
+            mensajeError = estado.error,
+            esRegistro = esRegistro,
+            onRegistrar = sesion::registrar,
+            onCambiarModo = {
+                esRegistro = !esRegistro
+                sesion.limpiarMensajes()
+            },
+            onLimpiarError = sesion::limpiarMensajes
+        )
+    } else {
+        // Las pantallas privadas requieren una sesión válida.
+        key(usuario.id) {
+            val navController = rememberNavController()
+
+            val salir: () -> Unit = {
+                navController.popBackStack(
+                    "inicio",
+                    inclusive = true
+                )
+                sesion.cerrarSesion()
+            }
+
+            NavHost(
+                navController = navController,
+                startDestination = "inicio"
+            ) {
+                composable("inicio") {
+                    PerfilScreen(
+                        usuario = usuario,
+                        cargando = estado.ocupado,
+                        error = estado.error,
+                        mensaje = estado.mensaje,
+                        onGuardar = sesion::editarPerfil,
+                        onDocumentos = {
+                            navController.navigate("documentos") {
+                                launchSingleTop = true
+                            }
+                        },
+                        onCerrarSesion = salir,
+                        onLimpiarMensajes = sesion::limpiarMensajes
+                    )
+                }
+
+                composable("documentos") {
+                    val documentos: DocumentosViewModel = viewModel(
+                        key = "documentos_${usuario.id}",
+                        factory = DocumentosViewModel.Factory(
+                            repositorio,
+                            usuario.id
+                        )
+                    )
+
+                    DocumentosScreen(
+                        viewModel = documentos,
+                        onCerrarSesion = salir
+                    )
+                }
+            }
         }
     }
 }

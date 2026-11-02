@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.fabiancg.ejemplosfuncionesnativas.data.ArchivoInvalidoException
 import com.fabiancg.ejemplosfuncionesnativas.data.Documento
+import com.fabiancg.ejemplosfuncionesnativas.data.DocumentoAbrible
 import com.fabiancg.ejemplosfuncionesnativas.data.DocumentoRepository
 import com.fabiancg.ejemplosfuncionesnativas.data.Usuario
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +22,8 @@ data class DocumentosUiState(
     val documentos: List<Documento> = emptyList(),
     val cargando: Boolean = true,   // primera carga de la lista
     val ocupado: Boolean = false,   // copiando un archivo
-    val mensaje: String? = null     // aviso pendiente de mostrar (Snackbar)
+    val mensaje: String? = null,    // aviso pendiente de mostrar (Snackbar)
+    val paraAbrir: DocumentoAbrible? = null // documento listo para que la pantalla lo abra
 )
 
 /**
@@ -81,6 +83,35 @@ class DocumentosViewModel(
             }
             _estado.update { it.copy(mensaje = mensaje) }
         }
+    }
+
+    /**
+     * El ViewModel NO abre el documento él mismo: abrir otra app requiere un Context de Android,
+     * que es cosa de la pantalla. Aquí solo se prepara y se deja en el estado; la pantalla lo consume.
+     */
+    fun abrirDocumento(documentoId: Long) {
+        viewModelScope.launch {
+            try {
+                val abrible = repositorio.prepararParaAbrir(usuarioId, documentoId)
+                _estado.update { it.copy(paraAbrir = abrible) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ArchivoInvalidoException) {
+                _estado.update { it.copy(mensaje = e.message ?: "No se pudo abrir el documento") }
+            } catch (e: Exception) {
+                _estado.update { it.copy(mensaje = "No se pudo abrir el documento") }
+            }
+        }
+    }
+
+    /** La pantalla avisa que ya intentó abrir el documento, para no abrirlo de nuevo al rotar el teléfono. */
+    fun aperturaProcesada() {
+        _estado.update { it.copy(paraAbrir = null) }
+    }
+
+    /** Permite que la pantalla muestre un aviso (por ejemplo, si no hay ninguna app para abrir el archivo). */
+    fun mostrarMensaje(texto: String) {
+        _estado.update { it.copy(mensaje = texto) }
     }
 
     /** La pantalla avisa que ya mostró el mensaje, para no repetirlo al rotar el teléfono. */
